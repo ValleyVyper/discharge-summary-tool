@@ -6,6 +6,26 @@ import markdown
 from weasyprint import HTML
 
 st.set_page_config(page_title="Discharge Summary Generator", page_icon="🏥", layout="wide")
+
+# ====================== PASSWORD PROTECTION ======================
+if "password_correct" not in st.session_state:
+    st.session_state.password_correct = False
+
+if not st.session_state.password_correct:
+    st.title("🔒 Discharge Summary Tool - Login")
+    st.subheader("DEPT OF SALYATANTRA, GOVT AYURVEDA COLLEGE, TVM")
+    
+    password = st.text_input("Enter Password", type="password")
+    
+    if st.button("Login", type="primary"):
+        if password == st.secrets["app_password"]:
+            st.session_state.password_correct = True
+            st.rerun()
+        else:
+            st.error("❌ Wrong password")
+    st.stop()  # Stop here until password is correct
+
+# ====================== MAIN APP (only visible after login) ======================
 st.title("🏥 Discharge Summary Automation Tool")
 st.subheader("DEPT OF SALYATANTRA, GOVT AYURVEDA COLLEGE, TVM")
 st.caption("Upload patient PDF or images → Gemini AI generates exact discharge summary + PDF")
@@ -97,69 +117,64 @@ if uploaded_files:
 
     st.success(f"✅ {len(images)} page(s) loaded successfully!")
 
-    gemini_key = st.text_input(
-        "🔑 Gemini API Key (free from https://aistudio.google.com/app/apikey)",
-        type="password",
-        value=""
-    )
-
     if st.button("🚀 Generate Discharge Summary", type="primary"):
-        if not gemini_key:
-            st.error("Please enter your Gemini API key")
-        else:
-            with st.spinner("Gemini is reading all pages and generating exact summary... (~10-20 seconds)"):
-                genai.configure(api_key=gemini_key)
-                
-                model = genai.GenerativeModel(
-                    model_name="gemini-1.5-pro",
-                    system_instruction=SYSTEM_PROMPT,
-                    generation_config={"temperature": 0.0}
+        with st.spinner("Gemini is reading all pages and generating exact summary... (~10-20 seconds)"):
+            genai.configure(api_key=st.secrets["gemini_key"])
+            
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-pro",
+                system_instruction=SYSTEM_PROMPT,
+                generation_config={"temperature": 0.0}
+            )
+
+            contents = ["Here is the complete patient data (all pages). Generate the discharge summary in the exact required format."]
+            for img in images:
+                contents.append(img)
+
+            response = model.generate_content(contents)
+            summary = response.text
+
+            # ====================== DISPLAY & DOWNLOADS ======================
+            st.subheader("📄 Generated Discharge Summary")
+            st.markdown(summary)
+
+            # Convert markdown → beautiful PDF
+            md = markdown.markdown(summary, extensions=['tables', 'nl2br'])
+            css = """
+            <style>
+            @page { margin: 2cm; }
+            body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6; }
+            h1 { text-align: center; font-size: 16pt; margin-bottom: 10px; }
+            h2 { font-size: 12pt; margin-top: 25px; margin-bottom: 5px; }
+            table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; vertical-align: top; }
+            th { background-color: #f5f5f5; }
+            </style>
+            """
+            full_html = css + md
+            pdf_bytes = HTML(string=full_html).write_pdf()
+
+            # Download buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="⬇️ Download as PDF (Recommended)",
+                    data=pdf_bytes,
+                    file_name="DISCHARGE_SUMMARY.pdf",
+                    mime="application/pdf",
+                    type="primary"
+                )
+            with col2:
+                st.download_button(
+                    label="⬇️ Download as Markdown (.md)",
+                    data=summary,
+                    file_name="DISCHARGE_SUMMARY.md",
+                    mime="text/markdown"
                 )
 
-                contents = ["Here is the complete patient data (all pages). Generate the discharge summary in the exact required format."]
-                for img in images:
-                    contents.append(img)
+            st.success("✅ Done! PDF is ready for printing or sharing.")
 
-                response = model.generate_content(contents)
-                summary = response.text
-
-                # ====================== DISPLAY & DOWNLOADS ======================
-                st.subheader("📄 Generated Discharge Summary")
-                st.markdown(summary)
-
-                # Convert markdown → beautiful PDF
-                md = markdown.markdown(summary, extensions=['tables', 'nl2br'])
-                css = """
-                <style>
-                @page { margin: 2cm; }
-                body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6; }
-                h1 { text-align: center; font-size: 16pt; margin-bottom: 10px; }
-                h2 { font-size: 12pt; margin-top: 25px; margin-bottom: 5px; }
-                table { border-collapse: collapse; width: 100%; margin: 15px 0; }
-                th, td { border: 1px solid #000; padding: 8px; text-align: left; vertical-align: top; }
-                th { background-color: #f5f5f5; }
-                </style>
-                """
-                full_html = css + md
-
-                pdf_bytes = HTML(string=full_html).write_pdf()
-
-                # Download buttons
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.download_button(
-                        label="⬇️ Download as PDF (Recommended)",
-                        data=pdf_bytes,
-                        file_name="DISCHARGE_SUMMARY.pdf",
-                        mime="application/pdf",
-                        type="primary"
-                    )
-                with col2:
-                    st.download_button(
-                        label="⬇️ Download as Markdown (.md)",
-                        data=summary,
-                        file_name="DISCHARGE_SUMMARY.md",
-                        mime="text/markdown"
-                    )
-
-                st.success("✅ Done! PDF is ready for printing or sharing.")
+# Logout button (optional)
+if st.button("🔓 Logout"):
+    st.session_state.password_correct = False
+    st.rerun()
