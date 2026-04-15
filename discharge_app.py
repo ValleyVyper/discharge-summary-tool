@@ -28,18 +28,6 @@ if not st.session_state.password_correct:
 # ====================== MAIN APP (only visible after login) ======================
 st.title("🏥 Discharge Summary Automation Tool")
 
-# ====================== DEBUG: SHOW AVAILABLE MODELS ======================
-if st.button("🔍 Show Available Gemini Models for my Key"):
-    with st.spinner("Fetching available models..."):
-        genai.configure(api_key=st.secrets["gemini_key"])
-        available_models = genai.list_models()
-        st.success("✅ Here are the models your API key can use:")
-        for model in available_models:
-            st.write(f"• **{model.name}**")
-            if "flash" in model.name.lower():
-                st.caption("← Recommended for fast discharge summary")
-
-
 st.subheader("DEPT OF SALYATANTRA, GOVT AYURVEDA COLLEGE, TVM")
 st.caption("Upload patient PDF or images → Gemini AI generates exact discharge summary + PDF")
 
