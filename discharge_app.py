@@ -2,11 +2,13 @@ import streamlit as st
 from pdf2image import convert_from_bytes
 from PIL import Image
 import google.generativeai as genai
+import markdown
+from weasyprint import HTML
 
 st.set_page_config(page_title="Discharge Summary Generator", page_icon="🏥", layout="wide")
 st.title("🏥 Discharge Summary Automation Tool")
 st.subheader("DEPT OF SALYATANTRA, GOVT AYURVEDA COLLEGE, TVM")
-st.caption("Upload patient PDF or images → Gemini AI generates exact discharge summary")
+st.caption("Upload patient PDF or images → Gemini AI generates exact discharge summary + PDF")
 
 # ====================== YOUR EXACT TEMPLATE ======================
 EXAMPLE_TEMPLATE = """DISCHARGE SUMMARY 
@@ -82,7 +84,6 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     images = []
 
-    # Handle PDF (converts to high-quality images)
     pdf_files = [f for f in uploaded_files if f.type == "application/pdf"]
     if pdf_files:
         pdf_file = pdf_files[0]
@@ -115,28 +116,50 @@ if uploaded_files:
                     generation_config={"temperature": 0.0}
                 )
 
-                # Prepare content (text + all images)
                 contents = ["Here is the complete patient data (all pages). Generate the discharge summary in the exact required format."]
                 for img in images:
-                    contents.append(img)   # Gemini accepts PIL images directly
+                    contents.append(img)
 
                 response = model.generate_content(contents)
                 summary = response.text
 
-                # Display result
+                # ====================== DISPLAY & DOWNLOADS ======================
                 st.subheader("📄 Generated Discharge Summary")
                 st.markdown(summary)
+
+                # Convert markdown → beautiful PDF
+                md = markdown.markdown(summary, extensions=['tables', 'nl2br'])
+                css = """
+                <style>
+                @page { margin: 2cm; }
+                body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6; }
+                h1 { text-align: center; font-size: 16pt; margin-bottom: 10px; }
+                h2 { font-size: 12pt; margin-top: 25px; margin-bottom: 5px; }
+                table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+                th, td { border: 1px solid #000; padding: 8px; text-align: left; vertical-align: top; }
+                th { background-color: #f5f5f5; }
+                </style>
+                """
+                full_html = css + md
+
+                pdf_bytes = HTML(string=full_html).write_pdf()
 
                 # Download buttons
                 col1, col2 = st.columns(2)
                 with col1:
+                    st.download_button(
+                        label="⬇️ Download as PDF (Recommended)",
+                        data=pdf_bytes,
+                        file_name="DISCHARGE_SUMMARY.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
+                with col2:
                     st.download_button(
                         label="⬇️ Download as Markdown (.md)",
                         data=summary,
                         file_name="DISCHARGE_SUMMARY.md",
                         mime="text/markdown"
                     )
-                with col2:
-                    st.info("Tip: Open .md in Google Docs / Word on your phone → Save as PDF")
 
-                st.success("✅ Done! Ready to print or save.")
+                st.success("✅ Done! PDF is ready for printing or sharing.")
